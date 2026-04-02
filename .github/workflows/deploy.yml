@@ -1,0 +1,172 @@
+name: Build and Deploy supervisor
+
+on:
+  push:
+    branches:
+      - uat
+      - main
+    paths:
+      - '**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  # ─────────────────────────────── UAT ─────────────────────────────────
+  deploy-uat:
+    name: Build and Push supervisor (UAT)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/uat'
+
+    env:
+      ENV: uat
+      PLATFORM_BRANCH: uat
+      GCP_PROJECT_NUMBER: "460918627115"
+      GCP_PROJECT_ID: complisight-uat
+      GCP_REGISTRY_PROJECT: cloudseals-shared-service
+      GCP_REPOSITORY: miba
+      GCP_SA_EMAIL: bitbucket-cicd-uat@complisight-uat.iam.gserviceaccount.com
+      WIF_POOL: github-pool
+      GCP_REGION: europe-west1
+      IMAGE_NAME: supervisor
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/460918627115/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          service_account: ${{ env.GCP_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Bump version
+        id: version
+        run: |
+          VERSION=$(jq -r ".${{ env.ENV }}" versions.json)
+          IMAGE_TAG=$(echo "$VERSION" | awk -F. '{$NF = $NF + 1;} 1' OFS=".")
+          jq ".${{ env.ENV }} = \"$IMAGE_TAG\"" versions.json > tmp && mv tmp versions.json
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build & Push Docker
+        run: |
+          FULL="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_REGISTRY_PROJECT }}/${{ env.GCP_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.IMAGE_TAG }}"
+          docker build -t "$FULL" .
+          docker push "$FULL"
+
+      - name: Commit version
+        run: |
+          git config user.email "pipeline@cloudseals.com"
+          git config user.name "Cloudseals Pipeline"
+          git add versions.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.IMAGE_TAG }} [skip ci]" || echo "No changes"
+          git pull --rebase origin ${{ env.ENV }}
+          git push origin ${{ env.ENV }}
+
+      - name: Update platform repo
+        env:
+          PLATFORM_REPO_TOKEN: ${{ secrets.PLATFORM_REPO_TOKEN }}
+        run: |
+          git clone --branch ${{ env.PLATFORM_BRANCH }} \
+            https://${PLATFORM_REPO_TOKEN}@github.com/CloudSeals-Inc/cloudseals-platform.git platform-repo
+
+          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/complisight/versions.json"
+          if [ -f "$JSON_PATH" ]; then
+            jq ".\"${{ env.IMAGE_NAME }}\" = \"${{ steps.version.outputs.IMAGE_TAG }}\"" \
+              "$JSON_PATH" > tmp && mv tmp "$JSON_PATH"
+            cd platform-repo
+            git config user.email "pipeline@cloudseals.com"
+            git config user.name "Cloudseals Pipeline"
+            git add .
+            git commit -m "[${{ env.ENV }}][complisight] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
+            git pull --rebase origin ${{ env.PLATFORM_BRANCH }}
+            git push origin ${{ env.PLATFORM_BRANCH }}
+          fi
+
+  # ─────────────────────────────── PROD ────────────────────────────────
+  deploy-prod:
+    name: Build and Push supervisor (PROD)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    env:
+      ENV: prod
+      PLATFORM_BRANCH: prod
+      GCP_PROJECT_NUMBER: "566111614361"
+      GCP_PROJECT_ID: complisight-prod
+      GCP_REGISTRY_PROJECT: cloudseals-shared-service
+      GCP_REPOSITORY: complisight-prod
+      GCP_SA_EMAIL: bitbucket-cicd-prod@complisight-prod.iam.gserviceaccount.com
+      WIF_POOL: bitbucket-pool-prod
+      GCP_REGION: europe-west1
+      IMAGE_NAME: supervisor
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/${{ env.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ env.WIF_POOL }}/providers/github-provider"
+          service_account: ${{ env.GCP_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Bump version
+        id: version
+        run: |
+          VERSION=$(jq -r ".${{ env.ENV }}" versions.json)
+          IMAGE_TAG=$(echo "$VERSION" | awk -F. '{$NF = $NF + 1;} 1' OFS=".")
+          jq ".${{ env.ENV }} = \"$IMAGE_TAG\"" versions.json > tmp && mv tmp versions.json
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build & Push Docker
+        run: |
+          FULL="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_REGISTRY_PROJECT }}/${{ env.GCP_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.IMAGE_TAG }}"
+          docker build -t "$FULL" .
+          docker push "$FULL"
+
+      - name: Commit version
+        run: |
+          git config user.email "pipeline@cloudseals.com"
+          git config user.name "Cloudseals Pipeline"
+          git add versions.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.IMAGE_TAG }} [skip ci]" || echo "No changes"
+          git pull --rebase origin ${{ env.ENV }}
+          git push origin ${{ env.ENV }}
+
+      - name: Update platform repo
+        env:
+          PLATFORM_REPO_TOKEN: ${{ secrets.PLATFORM_REPO_TOKEN }}
+        run: |
+          git clone --branch ${{ env.PLATFORM_BRANCH }} \
+            https://${PLATFORM_REPO_TOKEN}@github.com/CloudSeals-Inc/cloudseals-platform.git platform-repo
+
+          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/complisight/versions.json"
+          if [ -f "$JSON_PATH" ]; then
+            jq ".\"${{ env.IMAGE_NAME }}\" = \"${{ steps.version.outputs.IMAGE_TAG }}\"" \
+              "$JSON_PATH" > tmp && mv tmp "$JSON_PATH"
+            cd platform-repo
+            git config user.email "pipeline@cloudseals.com"
+            git config user.name "Cloudseals Pipeline"
+            git add .
+            git commit -m "[${{ env.ENV }}][complisight] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
+            git pull --rebase origin ${{ env.PLATFORM_BRANCH }}
+            git push origin ${{ env.PLATFORM_BRANCH }}
+          fi
