@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/MibaDB")
+MONGODB_URI = os.getenv("MONGO_URI", os.getenv("MONGODB_URI", "mongodb://mongo:27017/MibaDB"))
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "MibaDB")
 
 class Database:
