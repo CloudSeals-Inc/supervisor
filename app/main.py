@@ -68,6 +68,7 @@ class WorkOrderCreateRequest(BaseModel):
     report_lng: float
     report_photo_hash: str
     classification_result: dict      # from classification-api response
+    image_data: Optional[str] = None  # base64 image for before photo display
 
 class WorkOrderVerifyRequest(BaseModel):
     work_order_id: str
@@ -209,6 +210,7 @@ async def create_work_order(req: WorkOrderCreateRequest):
         "collector_id": req.collector_id,
         "location": {"lat": req.report_lat, "lng": req.report_lng},
         "before_photo_hash": req.report_photo_hash,
+        "image_data": req.image_data,
         "classification": req.classification_result,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
