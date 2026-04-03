@@ -197,6 +197,15 @@ async def health():
     count = await db.db["work_orders"].count_documents({"status": "OPEN"})
     return {"status": "ok", "service": "supervisor", "open_work_orders": count}
 
+@app.get("/stats")
+async def stats():
+    """Platform stats: total reports and total CO2e avoided."""
+    report_count = await db.db["work_orders"].count_documents({})
+    pipeline = [{"$group": {"_id": None, "total": {"$sum": "$classification.total_co2e_avoided_kg"}}}]
+    result = await db.db["work_orders"].aggregate(pipeline).to_list(1)
+    co2e_kg = result[0]["total"] if result else 0.0
+    return {"report_count": report_count, "co2e_avoided_kg": round(co2e_kg, 2)}
+
 
 
 @app.post("/workorder/create")
