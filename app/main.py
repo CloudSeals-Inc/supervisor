@@ -332,6 +332,36 @@ async def trigger_token_issuance(wo_id, collector_id, classification, weight_kg,
         logger.error("Token issuance failed for WO %s: %s", wo_id, e)
 
 
+@app.post("/workorder/complete")
+async def complete_work_order(payload: dict, bg: BackgroundTasks):
+    """Simple completion — closes work order and issues tokens. No GPS required."""
+    wo_id = payload.get("work_order_id")
+    collector_id = payload.get("collector_id", "anonymous")
+    after_image = payload.get("after_image_data")
+
+    wo = await db.db["work_orders"].find_one({"work_order_id": wo_id})
+    if not wo:
+        raise HTTPException(404, f"Work order {wo_id} not found")
+    if wo.get("status") == "CLOSED":
+        raise HTTPException(409, "Work order already closed")
+
+    await db.db["work_orders"].update_one(
+        {"work_order_id": wo_id},
+        {"$set": {
+            "status": "CLOSED",
+            "collector_id": collector_id,
+            "after_image_data": after_image,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    classification = wo.get("classification", {})
+    weight_kg = classification.get("total_weight_kg_estimate", 1.0) or 1.0
+    bg.add_task(trigger_token_issuance, wo_id, collector_id, classification, weight_kg, 1.0)
+    logger.info("WO %s completed by collector %s", wo_id, collector_id)
+    return {"work_order_id": wo_id, "status": "CLOSED", "message": "Work order completed"}
+
+
 @app.get("/workorder/{work_order_id}")
 async def get_work_order(work_order_id: str):
     wo = await db.db["work_orders"].find_one({"work_order_id": work_order_id})
