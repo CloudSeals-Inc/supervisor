@@ -374,18 +374,24 @@ async def get_work_order(work_order_id: str):
 
 
 @app.get("/workorder")
-async def list_work_orders(status: Optional[str] = None, limit: int = 50):
+async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[str] = None, role: Optional[str] = None, limit: int = 50):
     query = {}
     if status:
         query["status"] = status.upper()
-    
+    if reporter_id:
+        role_low = role.lower() if role else "citizen"
+        if role_low == "collector":
+            query["collector_id"] = reporter_id
+        else:
+            query["reporter_id"] = reporter_id
+
     cursor = db.db["work_orders"].find(query).sort("created_at", -1).limit(limit)
     orders = await cursor.to_list(length=limit)
-    
+
     for o in orders:
         if "_id" in o:
             del o["_id"]
-            
+
     return {"total": len(orders), "work_orders": orders}
 
 
