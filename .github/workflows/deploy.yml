@@ -24,12 +24,12 @@ jobs:
     env:
       ENV: uat
       PLATFORM_BRANCH: uat
-      GCP_PROJECT_NUMBER: "460918627115"
-      GCP_PROJECT_ID: complisight-uat
+      GCP_PROJECT_NUMBER: "340635219170"
+      GCP_PROJECT_ID: miba-uat
       GCP_REGISTRY_PROJECT: cloudseals-shared-service
       GCP_REPOSITORY: miba
-      GCP_SA_EMAIL: bitbucket-cicd-uat@complisight-uat.iam.gserviceaccount.com
-      WIF_POOL: github-pool
+      GCP_SA_EMAIL: miba-uat@miba-uat.iam.gserviceaccount.com
+      WIF_POOL: miba-github-pool
       GCP_REGION: europe-west1
       IMAGE_NAME: supervisor
 
@@ -42,7 +42,7 @@ jobs:
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: "projects/460918627115/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          workload_identity_provider: "projects/340635219170/locations/global/workloadIdentityPools/miba-github-pool/providers/github-provider"
           service_account: ${{ env.GCP_SA_EMAIL }}
 
       - name: Set up Cloud SDK
@@ -81,7 +81,7 @@ jobs:
           git clone --branch ${{ env.PLATFORM_BRANCH }} \
             https://${PLATFORM_REPO_TOKEN}@github.com/CloudSeals-Inc/cloudseals-platform.git platform-repo
 
-          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/complisight/versions.json"
+          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/miba/versions.json"
           if [ -f "$JSON_PATH" ]; then
             jq ".\"${{ env.IMAGE_NAME }}\" = \"${{ steps.version.outputs.IMAGE_TAG }}\"" \
               "$JSON_PATH" > tmp && mv tmp "$JSON_PATH"
@@ -89,7 +89,7 @@ jobs:
             git config user.email "pipeline@cloudseals.com"
             git config user.name "Cloudseals Pipeline"
             git add .
-            git commit -m "[${{ env.ENV }}][complisight] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
+            git commit -m "[${{ env.ENV }}][miba] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
             git pull --rebase origin ${{ env.PLATFORM_BRANCH }}
             git push origin ${{ env.PLATFORM_BRANCH }}
           fi
@@ -158,7 +158,7 @@ jobs:
           git clone --branch ${{ env.PLATFORM_BRANCH }} \
             https://${PLATFORM_REPO_TOKEN}@github.com/CloudSeals-Inc/cloudseals-platform.git platform-repo
 
-          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/complisight/versions.json"
+          JSON_PATH="platform-repo/gcp-terraform/environments/${{ env.ENV }}/miba/versions.json"
           if [ -f "$JSON_PATH" ]; then
             jq ".\"${{ env.IMAGE_NAME }}\" = \"${{ steps.version.outputs.IMAGE_TAG }}\"" \
               "$JSON_PATH" > tmp && mv tmp "$JSON_PATH"
@@ -166,7 +166,7 @@ jobs:
             git config user.email "pipeline@cloudseals.com"
             git config user.name "Cloudseals Pipeline"
             git add .
-            git commit -m "[${{ env.ENV }}][complisight] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
+            git commit -m "[${{ env.ENV }}][miba] bump ${{ env.IMAGE_NAME }} to ${{ steps.version.outputs.IMAGE_TAG }}" || echo "No changes"
             git pull --rebase origin ${{ env.PLATFORM_BRANCH }}
             git push origin ${{ env.PLATFORM_BRANCH }}
           fi
