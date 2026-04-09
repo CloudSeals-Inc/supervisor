@@ -385,14 +385,18 @@ async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[s
         else:
             query["reporter_id"] = reporter_id
 
-    cursor = db.db["work_orders"].find(query).sort("created_at", -1).limit(limit)
-    orders = await cursor.to_list(length=limit)
+    try:
+        cursor = db.db["work_orders"].find(query).sort("created_at", -1).limit(limit)
+        orders = await cursor.to_list(length=limit)
 
-    for o in orders:
-        if "_id" in o:
-            del o["_id"]
+        for o in orders:
+            if "_id" in o:
+                del o["_id"]
 
-    return {"total": len(orders), "work_orders": orders}
+        return {"total": len(orders), "work_orders": orders}
+    except Exception as e:
+        logger.error(f"Error listing work orders: {e}")
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
 
 
 # ─── Multi-Agent Analytics ────────────────────────────────────────────────
