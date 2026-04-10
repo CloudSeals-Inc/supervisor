@@ -16,7 +16,21 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import httpx
+from bson import ObjectId
 from .database import db, connect_to_mongo, close_mongo_connection
+
+
+def clean_doc(obj):
+    """Recursively convert BSON types to JSON-serializable equivalents."""
+    if isinstance(obj, dict):
+        return {k: clean_doc(v) for k, v in obj.items() if k != "_id"}
+    if isinstance(obj, list):
+        return [clean_doc(i) for i in obj]
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
 
 
 logging.basicConfig(level=logging.INFO)
@@ -389,11 +403,7 @@ async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[s
         cursor = db.db["work_orders"].find(query).sort("created_at", -1).limit(limit)
         orders = await cursor.to_list(length=limit)
 
-        for o in orders:
-            if "_id" in o:
-                del o["_id"]
-
-        return {"total": len(orders), "work_orders": orders}
+        return {"total": len(orders), "work_orders": [clean_doc(o) for o in orders]}
     except Exception as e:
         logger.error(f"Error listing work orders: {e}")
         raise HTTPException(500, detail=f"Database error: {str(e)}")
