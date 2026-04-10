@@ -41,7 +41,7 @@ app = FastAPI(
     description="WasteKI — 3-of-4 consensus work order verification",
     version="1.0.0",
 )
-app.add_middleware(CORSMiddleware, allow_origins=["*", "https://miba-ui-340635219170.europe-west1.run.app"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*", "https://miba-ui-340635219170.europe-west3.run.app"], allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("startup")
 async def startup_db_client():
