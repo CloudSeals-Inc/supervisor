@@ -515,7 +515,7 @@ async def ai_chat(payload: dict):
 
 
 @app.get("/supervisor/stats")
-async def stats():
+async def supervisor_stats():
     total = await db.db["work_orders"].count_documents({})
     open_count = await db.db["work_orders"].count_documents({"status": "OPEN"})
     closed = await db.db["work_orders"].count_documents({"status": "CLOSED"})
