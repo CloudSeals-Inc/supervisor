@@ -272,10 +272,22 @@ async def get_work_order(work_order_id: str):
 @app.get("/workorder")
 async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[str] = None, role: Optional[str] = None, limit: int = 50):
     async with db.pool.acquire() as conn:
-        # Exclude image_data — can be 200KB+ per row; full base64 is in GCS/miba-backend
-        query = """SELECT work_order_id, status, reporter_id, collector_id,
-                          location, before_photo_hash, classification, verification,
-                          created_at, updated_at
+        # Exclude image_data (200KB+ base64) and full classification (large AI JSON).
+        # Extract only the summary fields needed for list views via inline JSON extraction.
+        query = """SELECT
+                     work_order_id, status, reporter_id, collector_id,
+                     location, created_at, updated_at,
+                     classification::jsonb->>'dominant_category'      AS dominant_category,
+                     classification::jsonb->>'dominant_category_name' AS dominant_category_name,
+                     classification::jsonb->>'severity'               AS severity,
+                     (classification::jsonb->>'total_weight_kg_estimate')::float AS total_weight_kg_estimate,
+                     (classification::jsonb->>'total_co2e_avoided_kg')::float   AS total_co2e_avoided_kg,
+                     (classification::jsonb->>'grand_total_value_inr')::float   AS grand_total_value_inr,
+                     (classification::jsonb->>'total_scrap_value_inr_min')::float AS total_scrap_value_inr_min,
+                     (classification::jsonb->>'total_token_value_inr')::float   AS total_token_value_inr,
+                     (classification::jsonb->>'total_carbon_credit_inr')::float AS total_carbon_credit_inr,
+                     classification::jsonb->>'categories_found'       AS categories_found,
+                     classification::jsonb->>'ai_narrative'           AS ai_narrative
                    FROM work_orders WHERE 1=1"""
         args = []
         if status:
@@ -288,7 +300,32 @@ async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[s
 
         query += " ORDER BY created_at DESC LIMIT 50"
         rows = await conn.fetch(query, *args)
-        return {"total": len(rows), "work_orders": [clean_row(r) for r in rows]}
+
+        def build_wo(r):
+            d = dict(r)
+            for k, v in d.items():
+                if isinstance(v, datetime):
+                    d[k] = v.isoformat()
+            # Reconstruct the classification sub-object the mobile app expects
+            d["classification"] = {
+                "dominant_category":          d.pop("dominant_category", None),
+                "dominant_category_name":     d.pop("dominant_category_name", None),
+                "severity":                   d.pop("severity", None),
+                "total_weight_kg_estimate":   d.pop("total_weight_kg_estimate", 0) or 0,
+                "total_co2e_avoided_kg":      d.pop("total_co2e_avoided_kg", 0) or 0,
+                "grand_total_value_inr":      d.pop("grand_total_value_inr", 0) or 0,
+                "total_scrap_value_inr_min":  d.pop("total_scrap_value_inr_min", 0) or 0,
+                "total_token_value_inr":      d.pop("total_token_value_inr", 0) or 0,
+                "total_carbon_credit_inr":    d.pop("total_carbon_credit_inr", 0) or 0,
+                "categories_found":           json.loads(d.pop("categories_found") or "[]"),
+                "ai_narrative":               d.pop("ai_narrative", None),
+            }
+            if isinstance(d.get("location"), str):
+                try: d["location"] = json.loads(d["location"])
+                except: pass
+            return d
+
+        return {"total": len(rows), "work_orders": [build_wo(r) for r in rows]}
 
 @app.get("/ai/analytics")
 async def ai_analytics():
