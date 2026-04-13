@@ -272,7 +272,11 @@ async def get_work_order(work_order_id: str):
 @app.get("/workorder")
 async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[str] = None, role: Optional[str] = None, limit: int = 50):
     async with db.pool.acquire() as conn:
-        query = "SELECT * FROM work_orders WHERE 1=1"
+        # Exclude image_data — can be 200KB+ per row; full base64 is in GCS/miba-backend
+        query = """SELECT work_order_id, status, reporter_id, collector_id,
+                          location, before_photo_hash, classification, verification,
+                          created_at, updated_at
+                   FROM work_orders WHERE 1=1"""
         args = []
         if status:
             args.append(status.upper())
@@ -281,7 +285,7 @@ async def list_work_orders(status: Optional[str] = None, reporter_id: Optional[s
             args.append(reporter_id)
             field = "collector_id" if role and role.lower() == "collector" else "reporter_id"
             query += f" AND {field} = ${len(args)}"
-        
+
         query += " ORDER BY created_at DESC LIMIT 50"
         rows = await conn.fetch(query, *args)
         return {"total": len(rows), "work_orders": [clean_row(r) for r in rows]}
